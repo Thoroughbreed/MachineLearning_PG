@@ -7,4 +7,27 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Compile Remove="SentimentModel\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="SentimentModel\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="SentimentModel\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.ML" Version="1.7.1" />
+      <PackageReference Include="Microsoft.ML.ImageAnalytics" Version="1.7.1" />
+      <PackageReference Include="Microsoft.ML.Vision" Version="1.7.1" />
+      <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.3.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="workspace" />
+    </ItemGroup>
+
 </Project>
