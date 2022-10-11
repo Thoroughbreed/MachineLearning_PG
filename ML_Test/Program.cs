@@ -9,6 +9,7 @@ namespace ML_Test
 {
     class Program
     {
+        private static IDataView predictImageData;
         static void Main(string[] args)
         {
             var projectDirectory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../"));
@@ -21,11 +22,20 @@ namespace ML_Test
             IEnumerable<ImageData> images =
                 LoadImagesFromDirectory(folder: assetsRelativePath, useFolderNameAsLabel: true);
             IEnumerable<ImageData> imagesToPredict =
-                LoadImagesFromDirectory(folder: imageToPredictPath, useFolderNameAsLabel: false);
+                LoadImagesFromDirectory(folder: imageToPredictPath, useFolderNameAsLabel: true);
 
             IDataView imageData = mlContext.Data.LoadFromEnumerable(images);
+            predictImageData = mlContext.Data.LoadFromEnumerable(imagesToPredict);   
+            
+            var preprocessingPredictionPipeline = mlContext.Transforms.Conversion.MapValueToKey(
+                    inputColumnName: "Label",
+                    outputColumnName: "LabelAsKey")
+                .Append(mlContext.Transforms.LoadRawImageBytes(
+                    outputColumnName: "Image",
+                    imageFolder: assetsRelativePath,
+                    inputColumnName: "ImagePath"));
+            
             IDataView shuffledData = mlContext.Data.ShuffleRows(imageData);
-
             var preprocessingPipeline = mlContext.Transforms.Conversion.MapValueToKey(
                     inputColumnName: "Label",
                     outputColumnName: "LabelAsKey")
@@ -37,8 +47,13 @@ namespace ML_Test
             IDataView preProcessedData = preprocessingPipeline
                 .Fit(shuffledData)
                 .Transform(shuffledData);
+            IDataView preProcessedPredictionData = preprocessingPredictionPipeline.Fit(predictImageData).Transform(predictImageData);
+            TrainTestData predictionTest =
+                mlContext.Data.TrainTestSplit(data: preProcessedPredictionData, testFraction: 0.99);
 
-            TrainTestData trainSplit = mlContext.Data.TrainTestSplit(data: preProcessedData, testFraction: 0.3);
+            IDataView predictionSet = predictionTest.TestSet;
+            
+            TrainTestData trainSplit = mlContext.Data.TrainTestSplit(data: preProcessedData, testFraction: 0.4);
             TrainTestData validationTestSplit = mlContext.Data.TrainTestSplit(trainSplit.TestSet);
 
             IDataView trainSet = trainSplit.TrainSet;
@@ -62,16 +77,34 @@ namespace ML_Test
 
             ITransformer trainedModel = trainingPipeline.Fit(trainSet);
 
+            Console.WriteLine("=======================================");
+            Console.WriteLine("Trying single image");
             RunSingleImage(mlContext, testSet, trainedModel);
             Console.WriteLine("How did that work?");
             Console.WriteLine();
             Console.Write("Input amount of images to try on: ");
             int amount;
             int.TryParse(Console.ReadLine(), out amount);
+            Console.WriteLine("=======================================");
+            Console.WriteLine($"Trying {amount} random images");
             RunMultipleImages(mlContext, testSet, trainedModel, amount);
+            Console.WriteLine("=======================================");
+            Console.WriteLine("Trying to classify user images.....");
+            RunUserImages(mlContext, predictionSet, trainedModel);
+            Console.WriteLine();
+            Console.WriteLine("HEUREKA! IT'S DONE! o_O");
+        }
 
-            Console.WriteLine("IT'S DONE! o_O");
-            // Console.ReadKey();
+        private static void RunUserImages(MLContext mlContext, IDataView data, ITransformer trainedModel)
+        {
+            IDataView predictionData = trainedModel.Transform(data);
+
+            IEnumerable<ModelOutput> predictions = mlContext.Data
+                .CreateEnumerable<ModelOutput>(predictionData, reuseRowObject: true);
+            foreach (var prediction in predictions)
+            {
+                OutputPrediction(prediction, false);
+            }
         }
 
         private static void RunSingleImage(MLContext mlContext, IDataView data, ITransformer trainedModel)
@@ -83,8 +116,7 @@ namespace ML_Test
 
             ModelOutput prediction = predictionEngine.Predict(image);
 
-            Console.WriteLine("Trying single image");
-            OutputPrediction(prediction);
+            OutputPrediction(prediction, true);
         }
 
         private static void RunMultipleImages(MLContext mlContext, IDataView data, ITransformer trainedModel,
@@ -95,18 +127,17 @@ namespace ML_Test
             IEnumerable<ModelOutput> predictions = mlContext.Data
                 .CreateEnumerable<ModelOutput>(predictionData, reuseRowObject: true).Take(amount);
 
-            Console.WriteLine($"Trying {amount} random images");
             foreach (var prediction in predictions)
             {
-                OutputPrediction(prediction);
+                OutputPrediction(prediction, true);
             }
         }
 
-        private static void OutputPrediction(ModelOutput prediction)
+        private static void OutputPrediction(ModelOutput prediction, bool testData)
         {
             string imageName = Path.GetFileName(prediction.ImagePath);
-            Console.WriteLine(
-                $"Image: {imageName} \t| Actual Value: {prediction.Label} \t| Predicted Value: {prediction.PredictedLabel}");
+            if (testData) Console.WriteLine($"Image: {imageName} \t| Actual Value: {prediction.Label} \t| Predicted Value: {prediction.PredictedLabel}");
+            if (!testData) Console.WriteLine($"Image: {imageName} \t| Predicted Value: {prediction.PredictedLabel}");
         }
 
         private static IEnumerable<ImageData> LoadImagesFromDirectory(string folder, bool useFolderNameAsLabel = true)
