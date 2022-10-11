@@ -13,9 +13,20 @@ namespace SentimentModel.ConsoleApp
             {
                 Console.Write("Input data: ");
                 input = Console.ReadLine();
+                if (input == "iddqd")
+                {
+                    Console.Clear();
+                    Console.WriteLine("Your memory serves you well!");
+                    break;
+                }
+
+                if (input == "exit")
+                {
+                    break;
+                }
                 var sampleData = new SentimentModel.ModelInput() { Col0 = input };
                 var modelOutput = SentimentModel.Predict(sampleData);
-                bool posiometer = modelOutput.PredictedLabel == 0;
+                bool posiometer = modelOutput.PredictedLabel != 0;
                 Console.WriteLine($"Positive: {posiometer}, {(modelOutput.Score[0]*100).ToString("N2")}% negative" +
                                   $" - {(modelOutput.Score[1]*100).ToString("N2")}% positive");
             } while (input != "iddqd");
